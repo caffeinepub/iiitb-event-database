@@ -245,8 +245,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6">
-          © {new Date().getFullYear()}{" "}
-          <span className="font-semibold">IIIT Bangalore</span>. All rights
+          © <span className="font-semibold">IIIT Bangalore</span>. All rights
           reserved.
         </p>
       </motion.div>

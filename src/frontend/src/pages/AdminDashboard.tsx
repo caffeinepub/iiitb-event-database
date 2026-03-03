@@ -540,8 +540,7 @@ export default function AdminDashboard({
       <footer className="border-t border-border bg-card mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between flex-wrap gap-2">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} IIIT Bangalore. Event Management
-            System.
+            © IIIT Bangalore. All rights reserved.
           </p>
           <p className="text-xs text-muted-foreground">
             Built with ♥ using{" "}
