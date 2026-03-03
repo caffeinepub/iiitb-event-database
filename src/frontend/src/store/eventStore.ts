@@ -145,7 +145,20 @@ export function getEvents(): IEvent[] {
 }
 
 export function saveEvents(events: IEvent[]): void {
-  localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+  try {
+    localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+  } catch (err) {
+    if (
+      err instanceof DOMException &&
+      (err.name === "QuotaExceededError" ||
+        err.name === "NS_ERROR_DOM_QUOTA_REACHED")
+    ) {
+      throw new Error(
+        "Storage full: The uploaded file is too large. Please use a smaller file (under 1 MB for PDFs and documents).",
+      );
+    }
+    throw err;
+  }
 }
 
 export function addEvent(

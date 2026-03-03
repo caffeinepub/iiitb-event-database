@@ -196,6 +196,13 @@ export default function AdminDashboard({
   async function handlePosterUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 1 * 1024 * 1024) {
+      toast.error(
+        `Image too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please use an image under 1 MB to avoid storage limits.`,
+      );
+      e.target.value = "";
+      return;
+    }
     try {
       const b64 = await fileToBase64(file);
       setForm((f) => ({ ...f, posterId: b64, posterName: file.name }));
@@ -207,6 +214,14 @@ export default function AdminDashboard({
   async function handleOrderUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Warn if file is over 1 MB (base64 expansion ~33%, localStorage limit ~5 MB)
+    if (file.size > 1 * 1024 * 1024) {
+      toast.error(
+        `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please use a file under 1 MB to avoid storage limits.`,
+      );
+      e.target.value = "";
+      return;
+    }
     try {
       const b64 = await fileToBase64(file);
       setForm((f) => ({ ...f, adminOrderId: b64, adminOrderName: file.name }));
@@ -247,6 +262,9 @@ export default function AdminDashboard({
       }
       refreshEvents();
       closeModal();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to save event";
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
