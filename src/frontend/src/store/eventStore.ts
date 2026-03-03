@@ -8,9 +8,9 @@ export interface IEvent {
   venue: string;
   photoLink: string;
   organiser: string;
-  posterId: string; // base64 data URL
+  posterId: string; // IndexedDB file key (or legacy base64 data URL)
   posterName: string;
-  adminOrderId: string; // base64 data URL
+  adminOrderId: string; // IndexedDB file key (or legacy base64 data URL)
   adminOrderName: string;
   createdAt: number;
   views: number;
@@ -154,7 +154,7 @@ export function saveEvents(events: IEvent[]): void {
         err.name === "NS_ERROR_DOM_QUOTA_REACHED")
     ) {
       throw new Error(
-        "Storage full: The uploaded file is too large. Please use a smaller file (under 1 MB for PDFs and documents).",
+        "Storage quota exceeded when saving event metadata. Please contact support.",
       );
     }
     throw err;

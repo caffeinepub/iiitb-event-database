@@ -33,6 +33,7 @@ import {
   getEvents,
   updateEvent,
 } from "@/store/eventStore";
+import { deleteFile, saveFile } from "@/store/fileStore";
 import {
   BarChart2,
   CalendarDays,
@@ -99,13 +100,8 @@ const emptyForm: FormData = {
   adminOrderName: "",
 };
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+function generateFileId(): string {
+  return `file-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function formatDateRange(start: string, end: string): string {
@@ -136,6 +132,8 @@ export default function AdminDashboard({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [uploadingPoster, setUploadingPoster] = useState(false);
+  const [uploadingOrder, setUploadingOrder] = useState(false);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -193,40 +191,63 @@ export default function AdminDashboard({
     setForm(emptyForm);
   }
 
+  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+
   async function handlePosterUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 1 * 1024 * 1024) {
+    if (file.size > MAX_FILE_SIZE) {
       toast.error(
-        `Image too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please use an image under 1 MB to avoid storage limits.`,
+        `Image too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum allowed size is 100 MB.`,
       );
       e.target.value = "";
       return;
     }
+    setUploadingPoster(true);
     try {
-      const b64 = await fileToBase64(file);
-      setForm((f) => ({ ...f, posterId: b64, posterName: file.name }));
+      // Remove old poster file if replacing
+      if (form.posterId && !form.posterId.startsWith("data:")) {
+        await deleteFile(form.posterId).catch(() => {});
+      }
+      const newId = generateFileId();
+      await saveFile(newId, file);
+      setForm((f) => ({ ...f, posterId: newId, posterName: file.name }));
     } catch {
-      toast.error("Failed to upload poster");
+      toast.error("Failed to upload poster. Please try again.");
+    } finally {
+      setUploadingPoster(false);
+      e.target.value = "";
     }
   }
 
   async function handleOrderUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Warn if file is over 1 MB (base64 expansion ~33%, localStorage limit ~5 MB)
-    if (file.size > 1 * 1024 * 1024) {
+    if (file.size > MAX_FILE_SIZE) {
       toast.error(
-        `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please use a file under 1 MB to avoid storage limits.`,
+        `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum allowed size is 100 MB.`,
       );
       e.target.value = "";
       return;
     }
+    setUploadingOrder(true);
     try {
-      const b64 = await fileToBase64(file);
-      setForm((f) => ({ ...f, adminOrderId: b64, adminOrderName: file.name }));
+      // Remove old order file if replacing
+      if (form.adminOrderId && !form.adminOrderId.startsWith("data:")) {
+        await deleteFile(form.adminOrderId).catch(() => {});
+      }
+      const newId = generateFileId();
+      await saveFile(newId, file);
+      setForm((f) => ({
+        ...f,
+        adminOrderId: newId,
+        adminOrderName: file.name,
+      }));
     } catch {
-      toast.error("Failed to upload document");
+      toast.error("Failed to upload document. Please try again.");
+    } finally {
+      setUploadingOrder(false);
+      e.target.value = "";
     }
   }
 
@@ -275,9 +296,20 @@ export default function AdminDashboard({
     setDeleteDialogOpen(true);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!deletingId) return;
+    const allEvents = getEvents();
+    const target = allEvents.find((e) => e.id === deletingId);
     deleteEvent(deletingId);
+    // Clean up associated files from IndexedDB
+    if (target) {
+      if (target.posterId && !target.posterId.startsWith("data:")) {
+        deleteFile(target.posterId).catch(() => {});
+      }
+      if (target.adminOrderId && !target.adminOrderId.startsWith("data:")) {
+        deleteFile(target.adminOrderId).catch(() => {});
+      }
+    }
     refreshEvents();
     toast.success("Event deleted");
     setDeleteDialogOpen(false);
@@ -732,8 +764,11 @@ export default function AdminDashboard({
                 <Label className="text-sm font-body">Event Poster</Label>
                 <button
                   type="button"
-                  className="w-full border-2 border-dashed border-border rounded-lg p-3 cursor-pointer hover:border-primary/50 transition-colors text-left"
-                  onClick={() => posterInputRef.current?.click()}
+                  className="w-full border-2 border-dashed border-border rounded-lg p-3 cursor-pointer hover:border-primary/50 transition-colors text-left disabled:opacity-60 disabled:cursor-not-allowed"
+                  onClick={() =>
+                    !uploadingPoster && posterInputRef.current?.click()
+                  }
+                  disabled={uploadingPoster}
                   data-ocid="admin.event.poster.dropzone"
                 >
                   <input
@@ -746,18 +781,22 @@ export default function AdminDashboard({
                   />
                   <div className="flex items-center gap-2 text-sm">
                     <Upload className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                    {form.posterName ? (
+                    {uploadingPoster ? (
+                      <span className="text-muted-foreground animate-pulse">
+                        Uploading...
+                      </span>
+                    ) : form.posterName ? (
                       <span className="text-foreground font-medium truncate">
                         {form.posterName}
                       </span>
                     ) : (
                       <span className="text-muted-foreground">
-                        Upload poster image
+                        Upload poster image (up to 100 MB)
                       </span>
                     )}
                   </div>
                 </button>
-                {form.posterName && (
+                {form.posterName && !uploadingPoster && (
                   <button
                     type="button"
                     className="text-xs text-destructive hover:underline"
@@ -777,8 +816,11 @@ export default function AdminDashboard({
                 </Label>
                 <button
                   type="button"
-                  className="w-full border-2 border-dashed border-border rounded-lg p-3 cursor-pointer hover:border-primary/50 transition-colors text-left"
-                  onClick={() => orderInputRef.current?.click()}
+                  className="w-full border-2 border-dashed border-border rounded-lg p-3 cursor-pointer hover:border-primary/50 transition-colors text-left disabled:opacity-60 disabled:cursor-not-allowed"
+                  onClick={() =>
+                    !uploadingOrder && orderInputRef.current?.click()
+                  }
+                  disabled={uploadingOrder}
                   data-ocid="admin.event.order.dropzone"
                 >
                   <input
@@ -791,18 +833,22 @@ export default function AdminDashboard({
                   />
                   <div className="flex items-center gap-2 text-sm">
                     <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                    {form.adminOrderName ? (
+                    {uploadingOrder ? (
+                      <span className="text-muted-foreground animate-pulse">
+                        Uploading...
+                      </span>
+                    ) : form.adminOrderName ? (
                       <span className="text-foreground font-medium truncate">
                         {form.adminOrderName}
                       </span>
                     ) : (
                       <span className="text-muted-foreground">
-                        Upload PDF, Word, etc.
+                        Upload PDF, Word, etc. (up to 100 MB)
                       </span>
                     )}
                   </div>
                 </button>
-                {form.adminOrderName && (
+                {form.adminOrderName && !uploadingOrder && (
                   <button
                     type="button"
                     className="text-xs text-destructive hover:underline"
@@ -831,14 +877,16 @@ export default function AdminDashboard({
               </Button>
               <Button
                 type="submit"
-                disabled={saving}
+                disabled={saving || uploadingPoster || uploadingOrder}
                 data-ocid="admin.event.save_button"
               >
                 {saving
                   ? "Saving..."
-                  : editingId
-                    ? "Update Event"
-                    : "Add Event"}
+                  : uploadingPoster || uploadingOrder
+                    ? "Uploading file..."
+                    : editingId
+                      ? "Update Event"
+                      : "Add Event"}
               </Button>
             </DialogFooter>
           </form>

@@ -12,6 +12,7 @@ import {
   getEvents,
   incrementViewAndGet,
 } from "@/store/eventStore";
+import { downloadFile as downloadFromIndexedDB } from "@/store/fileStore";
 import {
   CalendarDays,
   Download,
@@ -59,13 +60,21 @@ function formatDateRange(start: string, end: string): string {
   return `${fmt(s)} – ${fmt(e)}`;
 }
 
-function downloadFile(dataUrl: string, filename: string) {
-  const a = document.createElement("a");
-  a.href = dataUrl;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+/** Handles both legacy base64 data URLs and new IndexedDB file IDs */
+async function triggerDownload(id: string, filename: string): Promise<void> {
+  if (!id) return;
+  if (id.startsWith("data:")) {
+    // Legacy base64 path
+    const a = document.createElement("a");
+    a.href = id;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } else {
+    // New IndexedDB path
+    await downloadFromIndexedDB(id, filename);
+  }
 }
 
 function EventCard({
@@ -86,21 +95,32 @@ function EventCard({
     }
   }
 
-  function handleDownloadPoster(e: React.MouseEvent) {
+  async function handleDownloadPoster(e: React.MouseEvent) {
     e.stopPropagation();
     if (!event.posterId) return;
-    downloadFile(event.posterId, event.posterName || `${event.name}-poster`);
-    toast.success("Poster downloaded");
+    try {
+      await triggerDownload(
+        event.posterId,
+        event.posterName || `${event.name}-poster`,
+      );
+      toast.success("Poster downloaded");
+    } catch {
+      toast.error("Failed to download poster");
+    }
   }
 
-  function handleDownloadOrder(e: React.MouseEvent) {
+  async function handleDownloadOrder(e: React.MouseEvent) {
     e.stopPropagation();
     if (!event.adminOrderId) return;
-    downloadFile(
-      event.adminOrderId,
-      event.adminOrderName || `${event.name}-order`,
-    );
-    toast.success("Document downloaded");
+    try {
+      await triggerDownload(
+        event.adminOrderId,
+        event.adminOrderName || `${event.name}-order`,
+      );
+      toast.success("Document downloaded");
+    } catch {
+      toast.error("Failed to download document");
+    }
   }
 
   function handleViewPhotos(e: React.MouseEvent) {
