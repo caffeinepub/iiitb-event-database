@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -26,18 +27,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  type IEvent,
-  addEvent,
-  deleteEvent,
-  getEvents,
-  updateEvent,
-} from "@/store/eventStore";
-import { deleteFile, saveFile } from "@/store/fileStore";
+import { useEvents } from "@/hooks/useEvents";
+import { clearSession } from "@/store/eventStore";
+import { getStorageClient } from "@/utils/storage";
 import {
   BarChart2,
   CalendarDays,
   FileText,
+  Loader2,
   LogOut,
   Pencil,
   Plus,
@@ -46,7 +43,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import AnalyticsPage from "./AnalyticsPage";
 
@@ -100,10 +97,6 @@ const emptyForm: FormData = {
   adminOrderName: "",
 };
 
-function generateFileId(): string {
-  return `file-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
 function formatDateRange(start: string, end: string): string {
   const s = new Date(start);
   const e = new Date(end);
@@ -124,7 +117,9 @@ export default function AdminDashboard({
   const [activeTab, setActiveTab] = useState<"events" | "analytics">(
     initialTab,
   );
-  const [events, setEvents] = useState<IEvent[]>(() => getEvents());
+  const { events, loading, refresh, addEvent, updateEvent, deleteEvent } =
+    useEvents();
+
   const [filterMonth, setFilterMonth] = useState<string>("all");
   const [filterYear, setFilterYear] = useState<string>("all");
 
@@ -132,14 +127,19 @@ export default function AdminDashboard({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [uploadingPoster, setUploadingPoster] = useState(false);
-  const [uploadingOrder, setUploadingOrder] = useState(false);
+
+  // Upload states: null = idle, 0–100 = uploading
+  const [posterProgress, setPosterProgress] = useState<number | null>(null);
+  const [orderProgress, setOrderProgress] = useState<number | null>(null);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const posterInputRef = useRef<HTMLInputElement>(null);
   const orderInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadingPoster = posterProgress !== null;
+  const uploadingOrder = orderProgress !== null;
 
   // Available years from events
   const availableYears = [
@@ -156,30 +156,26 @@ export default function AdminDashboard({
     return monthMatch && yearMatch;
   });
 
-  const refreshEvents = useCallback(() => {
-    setEvents(getEvents());
-  }, []);
-
   function openAddModal() {
     setEditingId(null);
     setForm(emptyForm);
     setModalOpen(true);
   }
 
-  function openEditModal(event: IEvent) {
+  function openEditModal(event: (typeof events)[0]) {
     setEditingId(event.id);
     setForm({
       name: event.name,
       startDate: event.startDate,
       endDate: event.endDate,
-      participants: String(event.participants),
+      participants: String(Number(event.participants)),
       purpose: event.purpose,
       venue: event.venue,
       photoLink: event.photoLink,
       organiser: event.organiser,
-      posterId: event.posterId,
+      posterId: event.poster,
       posterName: event.posterName,
-      adminOrderId: event.adminOrderId,
+      adminOrderId: event.adminOrder,
       adminOrderName: event.adminOrderName,
     });
     setModalOpen(true);
@@ -189,6 +185,8 @@ export default function AdminDashboard({
     setModalOpen(false);
     setEditingId(null);
     setForm(emptyForm);
+    setPosterProgress(null);
+    setOrderProgress(null);
   }
 
   const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
@@ -203,19 +201,22 @@ export default function AdminDashboard({
       e.target.value = "";
       return;
     }
-    setUploadingPoster(true);
+    setPosterProgress(0);
     try {
-      // Remove old poster file if replacing
-      if (form.posterId && !form.posterId.startsWith("data:")) {
-        await deleteFile(form.posterId).catch(() => {});
-      }
-      const newId = generateFileId();
-      await saveFile(newId, file);
-      setForm((f) => ({ ...f, posterId: newId, posterName: file.name }));
-    } catch {
-      toast.error("Failed to upload poster. Please try again.");
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const client = await getStorageClient();
+      const { hash } = await client.putFile(bytes, (pct) => {
+        setPosterProgress(pct);
+      });
+      setForm((f) => ({ ...f, posterId: hash, posterName: file.name }));
+      toast.success("Poster uploaded successfully");
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to upload poster";
+      toast.error(msg);
+      setForm((f) => ({ ...f, posterId: "", posterName: "" }));
     } finally {
-      setUploadingPoster(false);
+      setPosterProgress(null);
       e.target.value = "";
     }
   }
@@ -230,23 +231,26 @@ export default function AdminDashboard({
       e.target.value = "";
       return;
     }
-    setUploadingOrder(true);
+    setOrderProgress(0);
     try {
-      // Remove old order file if replacing
-      if (form.adminOrderId && !form.adminOrderId.startsWith("data:")) {
-        await deleteFile(form.adminOrderId).catch(() => {});
-      }
-      const newId = generateFileId();
-      await saveFile(newId, file);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const client = await getStorageClient();
+      const { hash } = await client.putFile(bytes, (pct) => {
+        setOrderProgress(pct);
+      });
       setForm((f) => ({
         ...f,
-        adminOrderId: newId,
+        adminOrderId: hash,
         adminOrderName: file.name,
       }));
-    } catch {
-      toast.error("Failed to upload document. Please try again.");
+      toast.success("Document uploaded successfully");
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to upload document";
+      toast.error(msg);
+      setForm((f) => ({ ...f, adminOrderId: "", adminOrderName: "" }));
     } finally {
-      setUploadingOrder(false);
+      setOrderProgress(null);
       e.target.value = "";
     }
   }
@@ -263,7 +267,7 @@ export default function AdminDashboard({
         name: form.name.trim(),
         startDate: form.startDate,
         endDate: form.endDate || form.startDate,
-        participants: Number(form.participants) || 0,
+        participants: BigInt(Number(form.participants) || 0),
         purpose: form.purpose.trim(),
         venue: form.venue.trim(),
         photoLink: form.photoLink.trim(),
@@ -275,13 +279,12 @@ export default function AdminDashboard({
       };
 
       if (editingId) {
-        updateEvent(editingId, payload);
+        await updateEvent(editingId, payload);
         toast.success("Event updated successfully");
       } else {
-        addEvent(payload);
+        await addEvent(payload);
         toast.success("Event added successfully");
       }
-      refreshEvents();
       closeModal();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to save event";
@@ -298,22 +301,21 @@ export default function AdminDashboard({
 
   async function handleDelete() {
     if (!deletingId) return;
-    const allEvents = getEvents();
-    const target = allEvents.find((e) => e.id === deletingId);
-    deleteEvent(deletingId);
-    // Clean up associated files from IndexedDB
-    if (target) {
-      if (target.posterId && !target.posterId.startsWith("data:")) {
-        deleteFile(target.posterId).catch(() => {});
-      }
-      if (target.adminOrderId && !target.adminOrderId.startsWith("data:")) {
-        deleteFile(target.adminOrderId).catch(() => {});
-      }
+    try {
+      await deleteEvent(deletingId);
+      toast.success("Event deleted");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to delete event";
+      toast.error(msg);
+    } finally {
+      setDeleteDialogOpen(false);
+      setDeletingId(null);
     }
-    refreshEvents();
-    toast.success("Event deleted");
-    setDeleteDialogOpen(false);
-    setDeletingId(null);
+  }
+
+  function handleLogout() {
+    clearSession();
+    onLogout();
   }
 
   return (
@@ -365,7 +367,7 @@ export default function AdminDashboard({
           <Button
             variant="ghost"
             size="sm"
-            onClick={onLogout}
+            onClick={handleLogout}
             className="text-primary-foreground/80 hover:text-white hover:bg-white/10 gap-1.5"
             data-ocid="admin.logout.button"
           >
@@ -393,18 +395,24 @@ export default function AdminDashboard({
                     All Events
                   </h1>
                   <p className="text-sm text-muted-foreground mt-0.5">
-                    {filteredEvents.length} event
-                    {filteredEvents.length !== 1 ? "s" : ""} found
+                    {loading
+                      ? "Loading…"
+                      : `${filteredEvents.length} event${filteredEvents.length !== 1 ? "s" : ""} found`}
                   </p>
                 </div>
-                <Button
-                  onClick={openAddModal}
-                  className="gap-2 font-body"
-                  data-ocid="admin.event.open_modal_button"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Event
-                </Button>
+                <div className="flex items-center gap-2">
+                  {loading && (
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  )}
+                  <Button
+                    onClick={openAddModal}
+                    className="gap-2 font-body"
+                    data-ocid="admin.event.open_modal_button"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Event
+                  </Button>
+                </div>
               </div>
 
               {/* Filters */}
@@ -457,6 +465,19 @@ export default function AdminDashboard({
                     Clear
                   </Button>
                 )}
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={refresh}
+                  disabled={loading}
+                  className="h-9 ml-auto text-muted-foreground hover:text-foreground gap-1"
+                >
+                  {loading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : null}
+                  Refresh
+                </Button>
               </div>
 
               {/* Events Table */}
@@ -489,7 +510,20 @@ export default function AdminDashboard({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredEvents.length === 0 ? (
+                      {loading && events.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={7}
+                            className="text-center text-muted-foreground py-16"
+                            data-ocid="admin.events.loading_state"
+                          >
+                            <div className="flex flex-col items-center gap-2">
+                              <Loader2 className="w-6 h-6 animate-spin text-border" />
+                              <p className="text-sm">Loading events…</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : filteredEvents.length === 0 ? (
                         <TableRow>
                           <TableCell
                             colSpan={7}
@@ -522,7 +556,7 @@ export default function AdminDashboard({
                                 variant="secondary"
                                 className="bg-primary/8 text-primary border-0 text-xs"
                               >
-                                {event.participants.toLocaleString()}
+                                {Number(event.participants).toLocaleString()}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground">
@@ -532,7 +566,7 @@ export default function AdminDashboard({
                               {event.organiser}
                             </TableCell>
                             <TableCell className="text-right text-sm text-muted-foreground">
-                              {event.views}
+                              {Number(event.views).toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1">
@@ -780,10 +814,14 @@ export default function AdminDashboard({
                     data-ocid="admin.event.poster.upload_button"
                   />
                   <div className="flex items-center gap-2 text-sm">
-                    <Upload className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     {uploadingPoster ? (
-                      <span className="text-muted-foreground animate-pulse">
-                        Uploading...
+                      <Loader2 className="w-4 h-4 text-primary animate-spin flex-shrink-0" />
+                    ) : (
+                      <Upload className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    )}
+                    {uploadingPoster ? (
+                      <span className="text-primary font-medium">
+                        Uploading… {posterProgress}%
                       </span>
                     ) : form.posterName ? (
                       <span className="text-foreground font-medium truncate">
@@ -795,6 +833,11 @@ export default function AdminDashboard({
                       </span>
                     )}
                   </div>
+                  {uploadingPoster && posterProgress !== null && (
+                    <div className="mt-2">
+                      <Progress value={posterProgress} className="h-1.5" />
+                    </div>
+                  )}
                 </button>
                 {form.posterName && !uploadingPoster && (
                   <button
@@ -832,10 +875,14 @@ export default function AdminDashboard({
                     data-ocid="admin.event.order.upload_button"
                   />
                   <div className="flex items-center gap-2 text-sm">
-                    <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     {uploadingOrder ? (
-                      <span className="text-muted-foreground animate-pulse">
-                        Uploading...
+                      <Loader2 className="w-4 h-4 text-primary animate-spin flex-shrink-0" />
+                    ) : (
+                      <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    )}
+                    {uploadingOrder ? (
+                      <span className="text-primary font-medium">
+                        Uploading… {orderProgress}%
                       </span>
                     ) : form.adminOrderName ? (
                       <span className="text-foreground font-medium truncate">
@@ -847,6 +894,11 @@ export default function AdminDashboard({
                       </span>
                     )}
                   </div>
+                  {uploadingOrder && orderProgress !== null && (
+                    <div className="mt-2">
+                      <Progress value={orderProgress} className="h-1.5" />
+                    </div>
+                  )}
                 </button>
                 {form.adminOrderName && !uploadingOrder && (
                   <button
@@ -880,13 +932,18 @@ export default function AdminDashboard({
                 disabled={saving || uploadingPoster || uploadingOrder}
                 data-ocid="admin.event.save_button"
               >
-                {saving
-                  ? "Saving..."
-                  : uploadingPoster || uploadingOrder
-                    ? "Uploading file..."
-                    : editingId
-                      ? "Update Event"
-                      : "Add Event"}
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                    Saving…
+                  </>
+                ) : uploadingPoster || uploadingOrder ? (
+                  "Uploading file…"
+                ) : editingId ? (
+                  "Update Event"
+                ) : (
+                  "Add Event"
+                )}
               </Button>
             </DialogFooter>
           </form>

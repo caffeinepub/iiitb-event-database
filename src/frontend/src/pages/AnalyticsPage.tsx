@@ -64,7 +64,7 @@ export default function AnalyticsPage({ events }: AnalyticsPageProps) {
 
   // Stats
   const totalEvents = events.length;
-  const totalViews = events.reduce((s, e) => s + e.views, 0);
+  const totalViews = events.reduce((s, e) => s + Number(e.views), 0);
 
   const venueCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -83,7 +83,7 @@ export default function AnalyticsPage({ events }: AnalyticsPageProps) {
   const avgParticipants = useMemo(() => {
     if (events.length === 0) return 0;
     return Math.round(
-      events.reduce((s, e) => s + e.participants, 0) / events.length,
+      events.reduce((s, e) => s + Number(e.participants), 0) / events.length,
     );
   }, [events]);
 
@@ -109,7 +109,7 @@ export default function AnalyticsPage({ events }: AnalyticsPageProps) {
 
   // Sorted event views table
   const sortedByViews = useMemo(
-    () => [...events].sort((a, b) => b.views - a.views),
+    () => [...events].sort((a, b) => Number(b.views) - Number(a.views)),
     [events],
   );
 
@@ -375,7 +375,7 @@ export default function AnalyticsPage({ events }: AnalyticsPageProps) {
                         variant="secondary"
                         className="bg-primary/10 text-primary border-0 font-mono text-xs"
                       >
-                        {event.views.toLocaleString()}
+                        {Number(event.views).toLocaleString()}
                       </Badge>
                     </TableCell>
                   </TableRow>

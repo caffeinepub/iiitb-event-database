@@ -19,6 +19,23 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
+export const Event = IDL.Record({
+  'id' : IDL.Text,
+  'photoLink' : IDL.Text,
+  'organiser' : IDL.Text,
+  'participants' : IDL.Nat,
+  'endDate' : IDL.Text,
+  'venue' : IDL.Text,
+  'views' : IDL.Nat,
+  'name' : IDL.Text,
+  'createdAt' : IDL.Int,
+  'posterName' : IDL.Text,
+  'adminOrder' : IDL.Text,
+  'adminOrderName' : IDL.Text,
+  'purpose' : IDL.Text,
+  'startDate' : IDL.Text,
+  'poster' : IDL.Text,
+});
 
 export const idlService = IDL.Service({
   '_caffeineStorageBlobIsLive' : IDL.Func(
@@ -47,6 +64,46 @@ export const idlService = IDL.Service({
       [],
     ),
   '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+  'addEvent' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Nat,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+      ],
+      [Event],
+      [],
+    ),
+  'deleteEvent' : IDL.Func([IDL.Text], [IDL.Bool], []),
+  'getEvents' : IDL.Func([], [IDL.Vec(Event)], ['query']),
+  'recordView' : IDL.Func([IDL.Text], [IDL.Opt(Event)], []),
+  'updateEvent' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Nat,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+      ],
+      [IDL.Opt(Event)],
+      [],
+    ),
 });
 
 export const idlInitArgs = [];
@@ -62,6 +119,23 @@ export const idlFactory = ({ IDL }) => {
   const _CaffeineStorageRefillResult = IDL.Record({
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
+  });
+  const Event = IDL.Record({
+    'id' : IDL.Text,
+    'photoLink' : IDL.Text,
+    'organiser' : IDL.Text,
+    'participants' : IDL.Nat,
+    'endDate' : IDL.Text,
+    'venue' : IDL.Text,
+    'views' : IDL.Nat,
+    'name' : IDL.Text,
+    'createdAt' : IDL.Int,
+    'posterName' : IDL.Text,
+    'adminOrder' : IDL.Text,
+    'adminOrderName' : IDL.Text,
+    'purpose' : IDL.Text,
+    'startDate' : IDL.Text,
+    'poster' : IDL.Text,
   });
   
   return IDL.Service({
@@ -91,6 +165,46 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+    'addEvent' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Nat,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+        ],
+        [Event],
+        [],
+      ),
+    'deleteEvent' : IDL.Func([IDL.Text], [IDL.Bool], []),
+    'getEvents' : IDL.Func([], [IDL.Vec(Event)], ['query']),
+    'recordView' : IDL.Func([IDL.Text], [IDL.Opt(Event)], []),
+    'updateEvent' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Nat,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+        ],
+        [IDL.Opt(Event)],
+        [],
+      ),
   });
 };
 

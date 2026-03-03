@@ -10,6 +10,23 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface Event {
+  'id' : string,
+  'photoLink' : string,
+  'organiser' : string,
+  'participants' : bigint,
+  'endDate' : string,
+  'venue' : string,
+  'views' : bigint,
+  'name' : string,
+  'createdAt' : bigint,
+  'posterName' : string,
+  'adminOrder' : string,
+  'adminOrderName' : string,
+  'purpose' : string,
+  'startDate' : string,
+  'poster' : string,
+}
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
   'blob_hash' : string,
@@ -37,6 +54,44 @@ export interface _SERVICE {
     _CaffeineStorageRefillResult
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
+  'addEvent' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      bigint,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+    ],
+    Event
+  >,
+  'deleteEvent' : ActorMethod<[string], boolean>,
+  'getEvents' : ActorMethod<[], Array<Event>>,
+  'recordView' : ActorMethod<[string], [] | [Event]>,
+  'updateEvent' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      string,
+      bigint,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+    ],
+    [] | [Event]
+  >,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];
