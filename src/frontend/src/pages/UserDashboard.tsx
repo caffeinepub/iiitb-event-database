@@ -183,7 +183,42 @@ interface DocViewerProps {
 
 function DocViewer({ docUrl, filename, onClose }: DocViewerProps) {
   const [downloading, setDownloading] = useState(false);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const canPreview = isPDF(filename);
+
+  // For PDFs: fetch as blob and create a local object URL so the iframe
+  // can load it without cross-origin restrictions from IC HTTP gateway
+  useEffect(() => {
+    if (!canPreview) return;
+    let revoked = false;
+    setLoadingPreview(true);
+    fetch(docUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        if (!revoked) setBlobUrl(url);
+      })
+      .catch(() => {
+        if (!revoked) setBlobUrl(null);
+      })
+      .finally(() => {
+        if (!revoked) setLoadingPreview(false);
+      });
+    return () => {
+      revoked = true;
+    };
+  }, [docUrl, canPreview]);
+
+  // Revoke blob URL when viewer closes
+  useEffect(() => {
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [blobUrl]);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -263,11 +298,45 @@ function DocViewer({ docUrl, filename, onClose }: DocViewerProps) {
         {/* Content area */}
         <div className="flex-1 overflow-hidden bg-muted/30">
           {canPreview ? (
-            <iframe
-              src={docUrl}
-              className="w-full h-full border-0"
-              title={filename}
-            />
+            loadingPreview ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Loading PDF…</p>
+              </div>
+            ) : blobUrl ? (
+              <iframe
+                src={blobUrl}
+                className="w-full h-full border-0"
+                title={filename}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-6">
+                <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center">
+                  <FileText className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-foreground font-display mb-2">
+                    Unable to load preview
+                  </h3>
+                  <p className="text-sm text-muted-foreground max-w-sm">
+                    The PDF could not be loaded for preview. Please download it
+                    to view.
+                  </p>
+                </div>
+                <Button
+                  onClick={handleDownload}
+                  disabled={downloading}
+                  className="gap-2"
+                >
+                  {downloading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  {downloading ? "Downloading…" : "Download PDF"}
+                </Button>
+              </div>
+            )
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-6">
               <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center">

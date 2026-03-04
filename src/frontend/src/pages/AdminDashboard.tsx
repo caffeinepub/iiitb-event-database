@@ -211,9 +211,14 @@ export default function AdminDashboard({
       setForm((f) => ({ ...f, posterId: hash, posterName: file.name }));
       toast.success("Poster uploaded successfully");
     } catch (err) {
+      const rawMsg = err instanceof Error ? err.message : String(err);
       const msg =
-        err instanceof Error ? err.message : "Failed to upload poster";
-      toast.error(msg);
+        rawMsg.toLowerCase().includes("v3 response") ||
+        rawMsg.toLowerCase().includes("certificate") ||
+        rawMsg.toLowerCase().includes("expected v3")
+          ? "Upload failed: the storage service is initializing. Please wait 30 seconds and try again."
+          : `Failed to upload poster: ${rawMsg}`;
+      toast.error(msg, { duration: 8000 });
       setForm((f) => ({ ...f, posterId: "", posterName: "" }));
     } finally {
       setPosterProgress(null);
@@ -245,9 +250,14 @@ export default function AdminDashboard({
       }));
       toast.success("Document uploaded successfully");
     } catch (err) {
+      const rawMsg = err instanceof Error ? err.message : String(err);
       const msg =
-        err instanceof Error ? err.message : "Failed to upload document";
-      toast.error(msg);
+        rawMsg.toLowerCase().includes("v3 response") ||
+        rawMsg.toLowerCase().includes("certificate") ||
+        rawMsg.toLowerCase().includes("expected v3")
+          ? "Upload failed: the storage service is initializing. Please wait 30 seconds and try again."
+          : `Failed to upload document: ${rawMsg}`;
+      toast.error(msg, { duration: 8000 });
       setForm((f) => ({ ...f, adminOrderId: "", adminOrderName: "" }));
     } finally {
       setOrderProgress(null);
